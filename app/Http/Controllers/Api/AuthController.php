@@ -31,18 +31,19 @@ class AuthController extends Controller
         return response()->json([
             'success'      => true,
             'message'      => 'User registered successfully',
-            'user'         => $user,
             'token'        => $token,
             'access_token' => $token,
             'token_type'   => 'bearer',
-            'expires_in'   => config('jwt.ttl') * 60
+            'expires_in'   => config('jwt.ttl') * 60,
+            'id'           => $user->id,
+            'name'         => $user->name,
+            'email'        => $user->email,
+            'profile_photo'=> $user->profile_photo,
         ], 201);
     }
 
     public function login(Request $request)
     {
-        Log::info('Login attempt', ['email' => $request->email]);
-
         $request->validate([
             'email'    => 'required|email',
             'password' => 'required|string',
@@ -52,39 +53,32 @@ class AuthController extends Controller
 
         try {
             if (!$token = JWTAuth::attempt($credentials)) {
-                Log::info('Login failed - invalid credentials', ['email' => $request->email]);
                 return response()->json([
                     'success' => false,
-                    'error' => 'Invalid credentials'
+                    'error'   => 'Invalid credentials'
                 ], 401);
             }
         } catch (JWTException $e) {
-            Log::error('JWT Exception during login', ['error' => $e->getMessage()]);
             return response()->json([
                 'success' => false,
-                'error' => 'Could not create token'
+                'error'   => 'Could not create token'
             ], 500);
         }
 
         $user = JWTAuth::user();
 
-        $response = [
+        return response()->json([
             'success'      => true,
             'message'      => 'Login successful',
             'token'        => $token,
             'access_token' => $token,
             'token_type'   => 'bearer',
             'expires_in'   => config('jwt.ttl') * 60,
-            'user'         => [
-                'id'    => $user->id,
-                'name'  => $user->name,
-                'email' => $user->email,
-            ]
-        ];
-
-        Log::info('Login successful', ['user_id' => $user->id, 'email' => $user->email]);
-
-        return response()->json($response, 200);
+            'id'           => $user->id,
+            'name'         => $user->name,
+            'email'        => $user->email,
+            'profile_photo'=> $user->profile_photo,
+        ], 200);
     }
 
     public function me()
@@ -95,19 +89,22 @@ class AuthController extends Controller
             if (!$user) {
                 return response()->json([
                     'success' => false,
-                    'error' => 'User not found'
+                    'error'   => 'User not found'
                 ], 404);
             }
 
             return response()->json([
-                'success' => true,
-                'user' => $user
+                'success'      => true,
+                'id'           => $user->id,
+                'name'         => $user->name,
+                'email'        => $user->email,
+                'profile_photo'=> $user->profile_photo,
             ], 200);
 
         } catch (JWTException $e) {
             return response()->json([
                 'success' => false,
-                'error' => 'Token is invalid'
+                'error'   => 'Token is invalid'
             ], 401);
         }
     }
@@ -123,7 +120,7 @@ class AuthController extends Controller
         } catch (JWTException $e) {
             return response()->json([
                 'success' => false,
-                'error' => 'Failed to logout'
+                'error'   => 'Failed to logout'
             ], 500);
         }
     }
@@ -133,17 +130,43 @@ class AuthController extends Controller
         try {
             $token = JWTAuth::refresh();
             return response()->json([
-                'success' => true,
-                'token' => $token,
+                'success'      => true,
+                'token'        => $token,
                 'access_token' => $token,
-                'token_type' => 'bearer',
-                'expires_in' => config('jwt.ttl') * 60
+                'token_type'   => 'bearer',
+                'expires_in'   => config('jwt.ttl') * 60
             ], 200);
         } catch (JWTException $e) {
             return response()->json([
                 'success' => false,
-                'error' => 'Could not refresh token'
+                'error'   => 'Could not refresh token'
             ], 401);
+        }
+    }
+
+    public function updateName(Request $request)
+    {
+        $request->validate([
+            'name' => 'required|string|max:255',
+        ]);
+
+        try {
+            $user = JWTAuth::parseToken()->authenticate();
+
+            if (!$user) {
+                return response()->json(['error' => 'User not found'], 404);
+            }
+
+            $user->name = $request->name;
+            $user->save();
+
+            return response()->json([
+                'message' => 'Name updated successfully',
+                'name'    => $user->name
+            ], 200);
+
+        } catch (JWTException $e) {
+            return response()->json(['error' => 'Token is invalid'], 401);
         }
     }
 }
